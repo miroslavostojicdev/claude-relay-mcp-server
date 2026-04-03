@@ -2,7 +2,7 @@
 
 > **Two AI brains. One mission. Zero manual intervention.**
 
-Claude Relay MCP Server is the communication bridge that lets Claude in Cowork mode send instructions directly to Claude Code, which executes them autonomously in the background while you get on with your life.
+Claude Relay MCP Server is a bridge that lets Claude in Cowork mode send instructions directly to Claude Code, which executes them autonomously in the background while you get on with your life.
 
 No copy-pasting. No tab-switching. No waiting. Just delegate and done.
 
@@ -127,14 +127,18 @@ tail -f ~/Desktop/claude-relay/watcher.log
 
 You should see:
 ```
-AVI Relay Watcher running... watching /Users/yourname/Desktop/claude-relay/instructions.json
+Relay Watcher running... watching /Users/yourname/Desktop/claude-relay/instructions.json
 ```
 
 ---
 
 ## Usage
 
+<<<<<<< HEAD
 ### Sending an Instruction (from Claude Cowork )
+=======
+### Sending an Instruction (from Claude Cowork)
+>>>>>>> b4d6e3e (Update README: remove internal names, use generic Claude Cowork references)
 
 Once the MCP server is registered, Claude can use the `send_instruction` tool:
 
@@ -173,9 +177,9 @@ cat ~/Desktop/claude-relay/instructions.json | python3 -m json.tool
 
 ---
 
-## Architecture: The AVI System
+## Architecture
 
-This MCP server is one piece of the broader **AVI personal AI infrastructure**:
+This MCP server is one piece of a broader personal AI infrastructure:
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -183,7 +187,11 @@ This MCP server is one piece of the broader **AVI personal AI infrastructure**:
 └──────────────────────┬──────────────────────────────┘
                        │ talk to
 ┌──────────────────────▼──────────────────────────────┐
+<<<<<<< HEAD
 │              (Claude Cowork)                     │
+=======
+│              Claude Cowork                           │
+>>>>>>> b4d6e3e (Update README: remove internal names, use generic Claude Cowork references)
 │   - Planning & research                              │
 │   - Memory via claude-memory-mcp-server              │
 │   - Delegates tasks via claude-relay-mcp-server ◄── │
@@ -198,7 +206,7 @@ This MCP server is one piece of the broader **AVI personal AI infrastructure**:
 └─────────────────────────────────────────────────────┘
 ```
 
-Related repos in the AVI stack:
+Related repos in the stack:
 - [`claude-memory-mcp-server`](https://github.com/miroslavostojicdev/claude-memory-mcp-server) — persistent memory across sessions
 - [`marketing-skills`](https://github.com/miroslavostojicdev/marketing-skills) — deep marketing skill library for Claude
 
@@ -207,13 +215,13 @@ Related repos in the AVI stack:
 ## Real-World Examples
 
 **"Push my latest code to GitHub"**
-> AVI sends the instruction → Claude Code commits and pushes → done in 30 seconds, no terminal needed.
+> Claude Cowork sends the instruction → Claude Code commits and pushes → done in 30 seconds, no terminal needed.
 
 **"Clone this repo, read the skills, and install them for me"**
-> AVI relays the task → Claude Code clones, reads 34 files, rewrites the SKILL.md, packages the .skill zip, pushes to GitHub → AVI verifies on GitHub.
+> Claude Cowork relays the task → Claude Code clones, reads 34 files, rewrites the SKILL.md, packages the .skill zip, pushes to GitHub → Claude Cowork verifies on GitHub.
 
 **"Rewrite this marketing skill with full depth"**
-> AVI analyzes the existing version, identifies gaps, writes a detailed improvement brief → relays to Claude Code → Claude Code rewrites 600+ lines, re-packages, re-pushes.
+> Claude Cowork analyzes the existing version, identifies gaps, writes a detailed improvement brief → relays to Claude Code → Claude Code rewrites 600+ lines, re-packages, re-pushes.
 
 ---
 
@@ -237,7 +245,7 @@ Related repos in the AVI stack:
 
 ## Security Note
 
-The watcher runs Claude Code with `--dangerously-skip-permissions`. This is intentional — it allows fully autonomous operation without human confirmation prompts. Only run instructions from sources you trust (i.e., yourself via AVI). Never expose the relay queue to external parties.
+The watcher runs Claude Code with `--dangerously-skip-permissions`. This is intentional — it allows fully autonomous operation without human confirmation prompts. Only run instructions from sources you trust (i.e., yourself via Claude Cowork). Never expose the relay queue to external parties.
 
 ---
 
@@ -249,7 +257,7 @@ MIT — do whatever you want with it. Build your own AI infrastructure.
 
 ## Author
 
-Built by **Miki** as part of the AVI personal AI system — a fully autonomous AI infrastructure where Claude Cowork and Claude Code work together as a team, with the human in the loop only when they choose to be.
+Built by **Miki** — a fully autonomous AI infrastructure where Claude Cowork and Claude Code work together as a team, with the human in the loop only when they choose to be.
 
 > *"The goal isn't to automate tasks. It's to free up your brain for the stuff that actually matters."*
 

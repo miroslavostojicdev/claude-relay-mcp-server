@@ -2,7 +2,7 @@
 
 > **Two AI brains. One mission. Zero manual intervention.**
 
-Claude Relay MCP Server is the communication backbone of the **AVI** (Asistent Virtualne Inteligencije) personal AI infrastructure — a bridge that lets Claude in Cowork mode send instructions directly to Claude Code, which executes them autonomously in the background while you get on with your life.
+Claude Relay MCP Server is the communication bridge that lets Claude in Cowork mode send instructions directly to Claude Code, which executes them autonomously in the background while you get on with your life.
 
 No copy-pasting. No tab-switching. No waiting. Just delegate and done.
 

@@ -6,9 +6,21 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { z } = require("zod");
 const fs = require("fs");
 const path = require("path");
-const os = require("os");
 
-const RELAY_DIR = path.join(os.homedir(), "Desktop", "claude-relay");
+// --- Config: resolve data directory from relay.config.json ---
+const PROJECT_ROOT = path.resolve(__dirname, "..");
+const CONFIG_PATH = path.join(PROJECT_ROOT, "relay.config.json");
+
+function loadConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  } catch {
+    return { dataDir: "./data" };
+  }
+}
+
+const config = loadConfig();
+const RELAY_DIR = path.resolve(PROJECT_ROOT, config.dataDir);
 const QUEUE_FILE = path.join(RELAY_DIR, "instructions.json");
 
 function ensureDir() {
@@ -115,6 +127,6 @@ async function main() {
   ensureDir();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  process.stderr.write(`Claude Relay MCP server running.\nQueue: ${QUEUE_FILE}\n`);
+  process.stderr.write(`Claude Relay MCP server running.\nData: ${RELAY_DIR}\nQueue: ${QUEUE_FILE}\n`);
 }
 main().catch(err => { process.stderr.write(`Fatal: ${err}\n`); process.exit(1); });

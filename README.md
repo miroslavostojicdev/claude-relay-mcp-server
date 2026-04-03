@@ -14,7 +14,7 @@ Claude Cowork is great for planning, research, and high-level thinking. Claude C
 
 **Claude Relay fixes that.**
 
-It creates a shared instruction queue that Cowork (AVI) can write to and Claude Code can read from — enabling a full **human → AVI → Claude Code** pipeline where you simply tell AVI what you want, and Claude Code gets it done silently in the background.
+It creates a shared instruction queue that Claude Cowork can write to and Claude Code can read from — enabling a full **human → Claude Cowork → Claude Code** pipeline where you simply tell Claude Cowork what you want, and Claude Code gets it done silently in the background.
 
 ---
 
@@ -24,7 +24,7 @@ It creates a shared instruction queue that Cowork (AVI) can write to and Claude 
 You
  │
  ▼
-AVI (Claude Cowork)
+Claude Cowork
  │  sends instruction via MCP tool
  ▼
 instructions.json  ◄── relay queue on your desktop
@@ -134,7 +134,7 @@ AVI Relay Watcher running... watching /Users/yourname/Desktop/claude-relay/instr
 
 ## Usage
 
-### Sending an Instruction (from Claude Cowork / AVI)
+### Sending an Instruction (from Claude Cowork )
 
 Once the MCP server is registered, Claude can use the `send_instruction` tool:
 
@@ -144,7 +144,7 @@ our product page and outputs a CSV of all pricing tiers.
 Save it to ~/Desktop/price-scraper.py and run it."
 ```
 
-AVI will call `mcp__claude-relay__send_instruction` behind the scenes. The watcher picks it up within 2 seconds, Claude Code executes it, and marks it done.
+Claude Cowork will call `mcp__claude-relay__send_instruction` behind the scenes. The watcher picks it up within 2 seconds, Claude Code executes it, and marks it done.
 
 ### Available MCP Tools
 
@@ -160,7 +160,7 @@ AVI will call `mcp__claude-relay__send_instruction` behind the scenes. The watch
 ```json
 {
   "message": "Push all changes in ~/Desktop/R&D to GitHub immediately.",
-  "from": "AVI",
+  "from": "Claude Cowork",
   "priority": "high"
 }
 ```
@@ -183,7 +183,7 @@ This MCP server is one piece of the broader **AVI personal AI infrastructure**:
 └──────────────────────┬──────────────────────────────┘
                        │ talk to
 ┌──────────────────────▼──────────────────────────────┐
-│              AVI (Claude Cowork)                     │
+│              (Claude Cowork)                     │
 │   - Planning & research                              │
 │   - Memory via claude-memory-mcp-server              │
 │   - Delegates tasks via claude-relay-mcp-server ◄── │

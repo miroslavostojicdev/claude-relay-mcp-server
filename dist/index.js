@@ -60,6 +60,7 @@ server.registerTool("send_instruction", {
     priority,
     message,
     status: "pending",
+    replies: [],
   };
   queue.push(instr);
   saveQueue(queue);
@@ -83,7 +84,15 @@ server.registerTool("get_instructions", {
   const lines = [`# Relay Instructions (${status})\n`];
   for (const i of items) {
     const ts = new Date(i.timestamp).toLocaleString();
-    lines.push(`---\n**ID:** ${i.id}\n**From:** ${i.from} | **Priority:** ${i.priority} | **Status:** ${i.status}\n**Time:** ${ts}\n\n${i.message}\n`);
+    let entry = `---\n**ID:** ${i.id}\n**From:** ${i.from} | **Priority:** ${i.priority} | **Status:** ${i.status}\n**Time:** ${ts}\n\n${i.message}\n`;
+    if (i.replies && i.replies.length > 0) {
+      entry += `\n**Replies (${i.replies.length}):**\n`;
+      for (const r of i.replies) {
+        const rts = new Date(r.timestamp).toLocaleString();
+        entry += `  - [${rts}] **${r.from}:** ${r.message}\n`;
+      }
+    }
+    lines.push(entry);
   }
   return { content: [{ type: "text", text: lines.join("\n") }] };
 });
@@ -121,6 +130,54 @@ server.registerTool("clear_instructions", {
   const kept = confirm_all ? [] : all.filter(i => i.status !== "done");
   saveQueue(kept);
   return { content: [{ type: "text", text: `🗑️ Cleared ${all.length - kept.length} instruction(s). ${kept.length} remaining.` }] };
+});
+
+// Reply to a specific instruction
+server.registerTool("reply_to_instruction", {
+  title: "Reply to Instruction",
+  description: "Send a reply to a specific instruction by ID. This enables two-way communication between Claude Code sessions.",
+  inputSchema: {
+    id: z.string().describe("The instruction ID to reply to"),
+    message: z.string().min(1).describe("The reply message"),
+    from: z.string().default("Claude Code").describe("Label for who is replying"),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+}, async ({ id, message, from }) => {
+  const queue = loadQueue();
+  const idx = queue.findIndex(i => i.id === id);
+  if (idx === -1) return { content: [{ type: "text", text: `No instruction found: ${id}` }] };
+  if (!queue[idx].replies) queue[idx].replies = [];
+  const reply = {
+    from,
+    message,
+    timestamp: new Date().toISOString(),
+  };
+  queue[idx].replies.push(reply);
+  saveQueue(queue);
+  return { content: [{ type: "text", text: `✅ Reply added to ${id}.\nFrom: ${from}\n\n${message}` }] };
+});
+
+// Get replies for a specific instruction
+server.registerTool("get_replies", {
+  title: "Get Replies",
+  description: "Fetch all replies for a specific instruction by ID.",
+  inputSchema: {
+    id: z.string().describe("The instruction ID to get replies for"),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+}, async ({ id }) => {
+  const queue = loadQueue();
+  const instr = queue.find(i => i.id === id);
+  if (!instr) return { content: [{ type: "text", text: `No instruction found: ${id}` }] };
+  const replies = instr.replies || [];
+  if (!replies.length) return { content: [{ type: "text", text: `No replies for instruction ${id}.` }] };
+
+  const lines = [`# Replies for ${id}\n`];
+  for (const r of replies) {
+    const ts = new Date(r.timestamp).toLocaleString();
+    lines.push(`- [${ts}] **${r.from}:** ${r.message}`);
+  }
+  return { content: [{ type: "text", text: lines.join("\n") }] };
 });
 
 async function main() {

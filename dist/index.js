@@ -6,6 +6,7 @@ const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio
 const { z } = require("zod");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 // --- Config: resolve data directory from relay.config.json ---
 const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -22,6 +23,53 @@ function loadConfig() {
 const config = loadConfig();
 const RELAY_DIR = path.resolve(PROJECT_ROOT, config.dataDir);
 const QUEUE_FILE = path.join(RELAY_DIR, "instructions.json");
+const VAULT_FILE = path.join(RELAY_DIR, "vault.enc");
+
+// --- Crypto helpers (AES-256-GCM + PBKDF2) ---
+function deriveKey(password, salt) {
+  return crypto.pbkdf2Sync(password, salt, 100000, 32, "sha512");
+}
+
+function encryptBlob(plaintext, masterPassword) {
+  const salt = crypto.randomBytes(32);
+  const iv = crypto.randomBytes(16);
+  const key = deriveKey(masterPassword, salt);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    salt: salt.toString("hex"),
+    iv: iv.toString("hex"),
+    authTag: authTag.toString("hex"),
+    ciphertext: encrypted.toString("hex"),
+  };
+}
+
+function decryptBlob(envelope, masterPassword) {
+  const salt = Buffer.from(envelope.salt, "hex");
+  const iv = Buffer.from(envelope.iv, "hex");
+  const authTag = Buffer.from(envelope.authTag, "hex");
+  const ciphertext = Buffer.from(envelope.ciphertext, "hex");
+  const key = deriveKey(masterPassword, salt);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+// --- Vault helpers ---
+function loadVault(masterPassword) {
+  if (!fs.existsSync(VAULT_FILE)) return {};
+  const raw = JSON.parse(fs.readFileSync(VAULT_FILE, "utf-8"));
+  const json = decryptBlob(raw, masterPassword);
+  return JSON.parse(json);
+}
+
+function saveVault(vaultObj, masterPassword) {
+  ensureDir();
+  const envelope = encryptBlob(JSON.stringify(vaultObj), masterPassword);
+  fs.writeFileSync(VAULT_FILE, JSON.stringify(envelope, null, 2), "utf-8");
+}
 
 function ensureDir() {
   if (!fs.existsSync(RELAY_DIR)) fs.mkdirSync(RELAY_DIR, { recursive: true });
@@ -178,6 +226,140 @@ server.registerTool("get_replies", {
     lines.push(`- [${ts}] **${r.from}:** ${r.message}`);
   }
   return { content: [{ type: "text", text: lines.join("\n") }] };
+});
+
+// Send an encrypted instruction into the queue
+server.registerTool("send_encrypted", {
+  title: "Send Encrypted Instruction",
+  description: "Send an encrypted instruction to another Claude Code session. The message body is encrypted with AES-256-GCM using a master password. The receiver must use read_encrypted with the same password to decrypt it.",
+  inputSchema: {
+    message: z.string().min(1).describe("The instruction or task to relay (will be encrypted)"),
+    from: z.string().default("Claude Code").describe("Label for who is sending"),
+    priority: z.enum(["low", "normal", "high"]).default("normal"),
+    master_password: z.string().min(1).describe("Master password used to encrypt the message"),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+}, async ({ message, from, priority, master_password }) => {
+  const queue = loadQueue();
+  const envelope = encryptBlob(message, master_password);
+  const instr = {
+    id: `instr_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    from,
+    priority,
+    message: { encrypted: true, ...envelope },
+    status: "pending",
+    replies: [],
+  };
+  queue.push(instr);
+  saveQueue(queue);
+  return { content: [{ type: "text", text: `🔒 Encrypted instruction queued.\nID: ${instr.id}\nFrom: ${from} | Priority: ${priority}\n\nMessage is encrypted. Use read_encrypted with the correct password to decrypt.` }] };
+});
+
+// Read and decrypt an encrypted instruction (self-destruct after reading)
+server.registerTool("read_encrypted", {
+  title: "Read Encrypted Instruction",
+  description: "Decrypt and read an encrypted instruction by ID. The message is wiped from the queue after reading (one-time read, self-destruct).",
+  inputSchema: {
+    id: z.string().describe("Instruction ID to decrypt"),
+    master_password: z.string().min(1).describe("Master password used to decrypt the message"),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+}, async ({ id, master_password }) => {
+  const queue = loadQueue();
+  const idx = queue.findIndex(i => i.id === id);
+  if (idx === -1) return { content: [{ type: "text", text: `No instruction found: ${id}` }] };
+  const instr = queue[idx];
+  if (!instr.message || !instr.message.encrypted) return { content: [{ type: "text", text: `Instruction ${id} is not encrypted. Use get_instructions instead.` }] };
+  try {
+    const decrypted = decryptBlob(instr.message, master_password);
+    // Self-destruct: remove from queue
+    queue.splice(idx, 1);
+    saveQueue(queue);
+    return { content: [{ type: "text", text: `🔓 Decrypted instruction (self-destructed from queue):\n\n**ID:** ${id}\n**From:** ${instr.from} | **Priority:** ${instr.priority}\n**Time:** ${new Date(instr.timestamp).toLocaleString()}\n\n${decrypted}` }] };
+  } catch (err) {
+    return { content: [{ type: "text", text: `❌ Decryption failed for ${id}. Wrong password or corrupted data.\nError: ${err.message}` }] };
+  }
+});
+
+// Vault: store a secret
+server.registerTool("vault_store", {
+  title: "Vault Store",
+  description: "Store a key-value secret in the encrypted vault. The entire vault is encrypted as one blob using AES-256-GCM.",
+  inputSchema: {
+    key: z.string().min(1).describe("Secret name (e.g. 'github-token', 'sudo-password')"),
+    value: z.string().min(1).describe("The secret value to store"),
+    master_password: z.string().min(1).describe("Master password for the vault"),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
+}, async ({ key, value, master_password }) => {
+  try {
+    const vault = loadVault(master_password);
+    vault[key] = value;
+    saveVault(vault, master_password);
+    return { content: [{ type: "text", text: `🔐 Secret "${key}" stored in vault.` }] };
+  } catch (err) {
+    return { content: [{ type: "text", text: `❌ Vault operation failed. Wrong password or corrupted vault.\nError: ${err.message}` }] };
+  }
+});
+
+// Vault: get a secret
+server.registerTool("vault_get", {
+  title: "Vault Get",
+  description: "Retrieve a secret by key from the encrypted vault.",
+  inputSchema: {
+    key: z.string().min(1).describe("Secret name to retrieve"),
+    master_password: z.string().min(1).describe("Master password for the vault"),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+}, async ({ key, master_password }) => {
+  try {
+    const vault = loadVault(master_password);
+    if (!(key in vault)) return { content: [{ type: "text", text: `No secret found with key "${key}".` }] };
+    return { content: [{ type: "text", text: `🔓 Secret "${key}":\n\n${vault[key]}` }] };
+  } catch (err) {
+    return { content: [{ type: "text", text: `❌ Vault operation failed. Wrong password or corrupted vault.\nError: ${err.message}` }] };
+  }
+});
+
+// Vault: list all keys
+server.registerTool("vault_list", {
+  title: "Vault List",
+  description: "List all secret key names stored in the vault (values are not shown).",
+  inputSchema: {
+    master_password: z.string().min(1).describe("Master password for the vault"),
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+}, async ({ master_password }) => {
+  try {
+    const vault = loadVault(master_password);
+    const keys = Object.keys(vault);
+    if (!keys.length) return { content: [{ type: "text", text: `Vault is empty. No secrets stored.` }] };
+    return { content: [{ type: "text", text: `🔐 Vault keys (${keys.length}):\n\n${keys.map(k => `- ${k}`).join("\n")}` }] };
+  } catch (err) {
+    return { content: [{ type: "text", text: `❌ Vault operation failed. Wrong password or corrupted vault.\nError: ${err.message}` }] };
+  }
+});
+
+// Vault: delete a key
+server.registerTool("vault_delete", {
+  title: "Vault Delete",
+  description: "Delete a secret by key from the encrypted vault.",
+  inputSchema: {
+    key: z.string().min(1).describe("Secret name to delete"),
+    master_password: z.string().min(1).describe("Master password for the vault"),
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
+}, async ({ key, master_password }) => {
+  try {
+    const vault = loadVault(master_password);
+    if (!(key in vault)) return { content: [{ type: "text", text: `No secret found with key "${key}".` }] };
+    delete vault[key];
+    saveVault(vault, master_password);
+    return { content: [{ type: "text", text: `🗑️ Secret "${key}" deleted from vault.` }] };
+  } catch (err) {
+    return { content: [{ type: "text", text: `❌ Vault operation failed. Wrong password or corrupted vault.\nError: ${err.message}` }] };
+  }
 });
 
 async function main() {
